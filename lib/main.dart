@@ -10,7 +10,14 @@ class BudgetApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Daily Budget',
+      // One seed colour, two schemes. Without an explicit darkTheme the
+      // app stays light even when the phone is set to dark.
       theme: ThemeData(colorSchemeSeed: Colors.teal),
+      darkTheme: ThemeData(
+        colorSchemeSeed: Colors.teal,
+        brightness: Brightness.dark,
+      ),
+      themeMode: ThemeMode.system,
       home: const HomeScreen(),
     );
   }
