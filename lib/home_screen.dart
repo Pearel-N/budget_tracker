@@ -9,6 +9,7 @@ import 'widgets/back_to_today_pill.dart';
 import 'widgets/budget_summary.dart';
 import 'widgets/day_header.dart';
 import 'widgets/expense_tile.dart';
+import 'widgets/load_error_banner.dart';
 import 'widgets/undo_countdown.dart';
 
 /// Scroll distance after which the "Back to today" pill appears.
@@ -36,6 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
   double _monthlyBudget = 0;
   final List<Expense> _expenses = [];
   bool _loading = true;
+  bool _loadFailed = false;
   bool _showBackToToday = false;
 
   @override
@@ -50,9 +52,19 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
+  /// Guarded end to end, because every failure here used to leave
+  /// [_loading] true and the app stuck on its spinner with no way out.
   Future<void> _load() async {
-    final budget = await _storage.loadBudget();
-    final expenses = await _storage.loadExpenses();
+    var budget = 0.0;
+    var loaded = const ExpenseLoadResult([]);
+
+    try {
+      budget = await _storage.loadBudget();
+      loaded = await _storage.loadExpenses();
+    } catch (_) {
+      // Storage itself is unreachable (a platform channel failure, say).
+      loaded = const ExpenseLoadResult([], failed: true);
+    }
 
     if (!mounted) return;
 
@@ -60,7 +72,8 @@ class _HomeScreenState extends State<HomeScreen> {
       _monthlyBudget = budget;
       _expenses
         ..clear()
-        ..addAll(expenses);
+        ..addAll(loaded.expenses);
+      _loadFailed = loaded.failed;
       _loading = false;
     });
   }
@@ -250,6 +263,10 @@ class _HomeScreenState extends State<HomeScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            if (_loadFailed)
+              LoadErrorBanner(
+                onDismiss: () => setState(() => _loadFailed = false),
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
               child: BudgetSummary(
