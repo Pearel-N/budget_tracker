@@ -40,6 +40,14 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _loadFailed = false;
   bool _showBackToToday = false;
 
+  /// Deletes waiting on the current undo window, oldest first. Emptied
+  /// when that window closes without the action being pressed.
+  final List<Expense> _pendingUndo = [];
+
+  /// Bumped per undo window so a snack bar that was hidden to make room
+  /// for a newer one can tell it is stale and leave the queue alone.
+  int _undoGeneration = 0;
+
   @override
   void initState() {
     super.initState();
@@ -108,38 +116,74 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _deleteExpense(Expense expense) async {
-    setState(() => _expenses.removeWhere((e) => e.id == expense.id));
+    setState(() {
+      _expenses.removeWhere((e) => e.id == expense.id);
+      _pendingUndo.add(expense);
+    });
     await _storage.saveExpenses(_expenses);
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          duration: _undoDuration,
-          persist: false,
-          content: UndoCountdown(
-            label: 'Deleted ₹${expense.amount.toStringAsFixed(0)}',
+    _showUndoSnackBar();
+  }
+
+  /// Deletes in quick succession share one undo window. Showing a second
+  /// snack bar hides the first, which used to strand the earlier delete
+  /// with no way back, so the whole pending batch is restored together.
+  void _showUndoSnackBar() {
+    final generation = ++_undoGeneration;
+    final count = _pendingUndo.length;
+    final label = count == 1
+        ? 'Deleted ₹${_pendingUndo.single.amount.toStringAsFixed(0)}'
+        : 'Deleted $count expenses';
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger
+        .showSnackBar(
+          SnackBar(
             duration: _undoDuration,
+            persist: false,
+            content: UndoCountdown(label: label, duration: _undoDuration),
+            action: SnackBarAction(label: 'Undo', onPressed: _undoDelete),
           ),
-          action: SnackBarAction(
-            label: 'Undo',
-            onPressed: () => _undoDelete(expense),
-          ),
-        ),
-      );
+        )
+        .closed
+        .then((reason) {
+          // A newer delete has taken over the window and this bar was
+          // hidden to make room for it, so the queue is still live.
+          if (generation != _undoGeneration) return;
+          if (reason == SnackBarClosedReason.action) return;
+          _pendingUndo.clear();
+        });
   }
 
   /// Pressing the action dismisses the snack bar itself, so this only has
-  /// to put the expense back.
-  void _undoDelete(Expense expense) {
-    setState(() => _expenses.add(expense));
-    _storage.saveExpenses(_expenses);
+  /// to put the pending expenses back.
+  Future<void> _undoDelete() async {
+    if (_pendingUndo.isEmpty) return;
+
+    final restored = List<Expense>.of(_pendingUndo);
+    _pendingUndo.clear();
+    setState(() => _expenses.addAll(restored));
+
+    try {
+      await _storage.saveExpenses(_expenses);
+    } catch (_) {
+      if (!mounted) return;
+      // Until that save lands the restore only exists in memory, so say
+      // so rather than letting the next launch drop it again silently.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Couldn't save the restored expenses.")),
+      );
+    }
   }
 
   Future<void> _seedDemoData() async {
     final demo = generateDemoExpenses();
     setState(() {
+      // A pending undo from before the reset would resurrect a row that
+      // no longer belongs to this data set.
+      _pendingUndo.clear();
       _expenses
         ..clear()
         ..addAll(demo);
@@ -151,6 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _clearAllData() async {
     setState(() {
+      _pendingUndo.clear();
       _expenses.clear();
       _monthlyBudget = 0;
     });
