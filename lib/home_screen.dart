@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'add_expense_sheet.dart';
 import 'budget_logic.dart';
@@ -23,6 +25,9 @@ const _backToTodayThreshold = 220.0;
 /// is actually honoured.
 const _undoDuration = Duration(seconds: 5);
 
+/// Midnight at the start of [t]'s calendar day.
+DateTime _startOfDay(DateTime t) => DateTime(t.year, t.month, t.day);
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -30,7 +35,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _storage = BudgetStorage();
   final _scrollController = ScrollController();
 
@@ -39,6 +44,16 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _loading = true;
   bool _loadFailed = false;
   bool _showBackToToday = false;
+
+  /// The day the whole screen is built against. Held in a field rather
+  /// than read from DateTime.now() inside build(), because build() only
+  /// re-runs when something asks it to — so an app left open past
+  /// midnight kept calling yesterday "Today" and showed a stale
+  /// allowance until it happened to rebuild.
+  DateTime _today = _startOfDay(DateTime.now());
+
+  /// Fires at the next local midnight to roll [_today] over.
+  Timer? _midnightTimer;
 
   /// Deletes waiting on the current undo window, oldest first. Emptied
   /// when that window closes without the action being pressed.
@@ -51,13 +66,51 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _scheduleMidnightRollover();
     _load();
   }
 
   @override
   void dispose() {
+    _midnightTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Timers don't run while the app is suspended, so the midnight timer
+    // can't be relied on across a night with the phone asleep. Coming back
+    // to the foreground is the other moment the date can have changed.
+    if (state == AppLifecycleState.resumed) _rollOverDay();
+  }
+
+  /// Re-reads the clock and rebuilds if the calendar day moved on. Always
+  /// re-arms the timer, so a fire that lands a hair early (or a clock or
+  /// time-zone change) corrects itself instead of waiting a whole day.
+  void _rollOverDay() {
+    if (!mounted) return;
+
+    final today = _startOfDay(DateTime.now());
+    if (today != _today) setState(() => _today = today);
+
+    _scheduleMidnightRollover();
+  }
+
+  void _scheduleMidnightRollover() {
+    _midnightTimer?.cancel();
+
+    final now = DateTime.now();
+    // Built from calendar fields rather than now.add(Duration(days: 1)) so a
+    // DST shift still lands on midnight. The extra second keeps the timer
+    // from firing while the clock is still a tick short of the new day.
+    final nextMidnight = DateTime(now.year, now.month, now.day + 1);
+    _midnightTimer = Timer(
+      nextMidnight.difference(now) + const Duration(seconds: 1),
+      _rollOverDay,
+    );
   }
 
   /// Guarded end to end, because every failure here used to leave
@@ -286,8 +339,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final now = DateTime.now();
-    final rows = _buildRows(_sections(now), now);
+    final rows = _buildRows(_sections(_today), _today);
 
     return Scaffold(
       appBar: AppBar(
@@ -318,12 +370,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 allowance: allowanceFor(
                   monthlyBudget: _monthlyBudget,
                   entries: aggregateByDay(_expenses),
-                  day: now,
+                  day: _today,
                 ),
-                spentToday: spentOn(_expenses, now),
+                spentToday: spentOn(_expenses, _today),
                 monthlyBudget: _monthlyBudget,
-                spentThisMonth: spentInMonth(_expenses, now),
-                daysLeftInMonth: daysRemainingIn(now),
+                spentThisMonth: spentInMonth(_expenses, _today),
+                daysLeftInMonth: daysRemainingIn(_today),
                 onSetBudget: _openSettings,
               ),
             ),
