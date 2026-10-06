@@ -1,28 +1,42 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'expense.dart';
+import 'money.dart';
 
 /// Everything that knows *where* data lives goes here. Swapping this
 /// for Supabase later means changing this file only.
 class BudgetStorage {
-  static const _budgetKey = 'monthly_budget';
+  /// Pre-paise key: a double of rupees. Only read now, never written.
+  static const _legacyBudgetKey = 'monthly_budget';
+  static const _budgetPaiseKey = 'monthly_budget_paise';
   static const _expensesKey = 'expenses';
 
   /// Falls back to 0 rather than throwing: a stored value of the wrong
   /// type would otherwise take the whole load down with it, and "no budget
   /// set yet" is a state the UI already handles.
-  Future<double> loadBudget() async {
+  ///
+  /// Reads the old rupee key when the paise one isn't there, so an install
+  /// from before this change keeps its budget instead of waking up at zero.
+  Future<int> loadBudgetPaise() async {
     final prefs = await SharedPreferences.getInstance();
     try {
-      return prefs.getDouble(_budgetKey) ?? 0;
+      final paise = prefs.getInt(_budgetPaiseKey);
+      if (paise != null) return paise;
+
+      final rupees = prefs.getDouble(_legacyBudgetKey);
+      if (rupees == null) return 0;
+      return (rupees * paisePerRupee).round();
     } catch (_) {
       return 0;
     }
   }
 
-  Future<void> saveBudget(double amount) async {
+  Future<void> saveBudgetPaise(int paise) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_budgetKey, amount);
+    await prefs.setInt(_budgetPaiseKey, paise);
+    // Dropped once the paise value is safely written, so a later load can't
+    // pick the stale rupee figure back up.
+    await prefs.remove(_legacyBudgetKey);
   }
 
   /// Never throws. Unreadable stored data is recoverable — starting empty
@@ -58,7 +72,8 @@ class BudgetStorage {
   /// screen.
   Future<void> clearAll() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_budgetKey);
+    await prefs.remove(_budgetPaiseKey);
+    await prefs.remove(_legacyBudgetKey);
     await prefs.remove(_expensesKey);
   }
 }

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
+import '../money.dart';
 
 /// Section header in the history list: "Today", "Yesterday", or a date,
 /// with that day's total on the right.
 class DayHeader extends StatelessWidget {
   final String label;
-  final double total;
+  final int totalPaise;
 
-  const DayHeader({super.key, required this.label, required this.total});
+  const DayHeader({super.key, required this.label, required this.totalPaise});
 
   @override
   Widget build(BuildContext context) {
@@ -22,7 +23,7 @@ class DayHeader extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: style),
-          Text('₹${total.toStringAsFixed(0)}', style: style),
+          Text(formatMoney(totalPaise), style: style),
         ],
       ),
     );

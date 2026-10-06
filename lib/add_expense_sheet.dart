@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'category_ui.dart';
 import 'expense.dart';
+import 'money.dart';
 
 /// Opens the add-expense sheet and resolves to the new [Expense],
 /// or null if the user backed out.
@@ -44,15 +45,22 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
     super.dispose();
   }
 
-  double get _amount => double.tryParse(_amountController.text.trim()) ?? 0;
+  /// Null until the field holds an amount worth saving: empty, junk,
+  /// negative and zero all read as "not yet".
+  int? get _amountPaise {
+    final paise = parseRupeesToPaise(_amountController.text);
+    if (paise == null || paise <= 0) return null;
+    return paise;
+  }
 
   void _save() {
-    if (_amount <= 0) return;
+    final paise = _amountPaise;
+    if (paise == null) return;
 
     Navigator.of(context).pop(Expense(
       id: Expense.newId(),
       at: DateTime.now(),
-      amount: _amount,
+      amountPaise: paise,
       category: _category,
       note: _noteController.text.trim(),
     ));
@@ -60,7 +68,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final canSave = _amount > 0;
+    final canSave = _amountPaise != null;
 
     return Padding(
       // Lifts the sheet above the keyboard.

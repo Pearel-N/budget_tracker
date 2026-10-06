@@ -6,6 +6,7 @@ import 'budget_logic.dart';
 import 'budget_storage.dart';
 import 'demo_data.dart';
 import 'expense.dart';
+import 'money.dart';
 import 'settings_screen.dart';
 import 'widgets/back_to_today_pill.dart';
 import 'widgets/budget_summary.dart';
@@ -39,7 +40,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _storage = BudgetStorage();
   final _scrollController = ScrollController();
 
-  double _monthlyBudget = 0;
+  int _monthlyBudgetPaise = 0;
   final List<Expense> _expenses = [];
   bool _loading = true;
   bool _loadFailed = false;
@@ -116,11 +117,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// Guarded end to end, because every failure here used to leave
   /// [_loading] true and the app stuck on its spinner with no way out.
   Future<void> _load() async {
-    var budget = 0.0;
+    var budgetPaise = 0;
     var loaded = const ExpenseLoadResult([]);
 
     try {
-      budget = await _storage.loadBudget();
+      budgetPaise = await _storage.loadBudgetPaise();
       loaded = await _storage.loadExpenses();
     } catch (_) {
       // Storage itself is unreachable (a platform channel failure, say).
@@ -130,7 +131,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (!mounted) return;
 
     setState(() {
-      _monthlyBudget = budget;
+      _monthlyBudgetPaise = budgetPaise;
       _expenses
         ..clear()
         ..addAll(loaded.expenses);
@@ -186,7 +187,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final generation = ++_undoGeneration;
     final count = _pendingUndo.length;
     final label = count == 1
-        ? 'Deleted ₹${_pendingUndo.single.amount.toStringAsFixed(0)}'
+        ? 'Deleted ${formatMoney(_pendingUndo.single.amountPaise)}'
         : 'Deleted $count expenses';
 
     final messenger = ScaffoldMessenger.of(context);
@@ -240,17 +241,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _expenses
         ..clear()
         ..addAll(demo);
-      if (_monthlyBudget == 0) _monthlyBudget = 30000;
+      if (_monthlyBudgetPaise == 0) {
+        _monthlyBudgetPaise = 30000 * paisePerRupee;
+      }
     });
     await _storage.saveExpenses(_expenses);
-    await _storage.saveBudget(_monthlyBudget);
+    await _storage.saveBudgetPaise(_monthlyBudgetPaise);
   }
 
   Future<void> _clearAllData() async {
     setState(() {
       _pendingUndo.clear();
       _expenses.clear();
-      _monthlyBudget = 0;
+      _monthlyBudgetPaise = 0;
     });
     await _storage.clearAll();
   }
@@ -258,10 +261,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _openSettings() {
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => SettingsScreen(
-        monthlyBudget: _monthlyBudget,
-        onBudgetChanged: (amount) {
-          setState(() => _monthlyBudget = amount);
-          _storage.saveBudget(amount);
+        monthlyBudgetPaise: _monthlyBudgetPaise,
+        onBudgetChanged: (paise) {
+          setState(() => _monthlyBudgetPaise = paise);
+          _storage.saveBudgetPaise(paise);
         },
         onSeedDemoData: _seedDemoData,
         onClearData: _clearAllData,
@@ -278,7 +281,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     if (groups.isEmpty || groups.first.date != todayStart) {
       return [
-        DayGroup(date: todayStart, expenses: const [], total: 0),
+        DayGroup(date: todayStart, expenses: const [], totalPaise: 0),
         ...groups,
       ];
     }
@@ -306,7 +309,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget _buildRow(_Row row) {
     switch (row) {
       case _HeaderRow(:final group, :final label):
-        return DayHeader(label: label, total: group.total);
+        return DayHeader(label: label, totalPaise: group.totalPaise);
 
       case _EmptyRow():
         return const Padding(
@@ -367,14 +370,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
               child: BudgetSummary(
-                allowance: allowanceFor(
-                  monthlyBudget: _monthlyBudget,
+                allowancePaise: allowanceFor(
+                  monthlyBudgetPaise: _monthlyBudgetPaise,
                   entries: aggregateByDay(_expenses),
                   day: _today,
                 ),
-                spentToday: spentOn(_expenses, _today),
-                monthlyBudget: _monthlyBudget,
-                spentThisMonth: spentInMonth(_expenses, _today),
+                spentTodayPaise: spentOn(_expenses, _today),
+                monthlyBudgetPaise: _monthlyBudgetPaise,
+                spentThisMonthPaise: spentInMonth(_expenses, _today),
                 daysLeftInMonth: daysRemainingIn(_today),
                 onSetBudget: _openSettings,
               ),

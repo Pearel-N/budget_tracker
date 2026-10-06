@@ -1,17 +1,20 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:budget_tracker/budget_logic.dart';
 import 'package:budget_tracker/expense.dart';
+import 'package:budget_tracker/money.dart';
 
+/// Amounts are written in rupees here because that is how they read; the
+/// model stores paise, so expectations below are in paise.
 Expense _expense(
   DateTime at,
-  double amount, {
+  num rupees, {
   ExpenseCategory category = ExpenseCategory.other,
   String note = '',
 }) {
   return Expense(
-    id: '${at.microsecondsSinceEpoch}-$amount',
+    id: '${at.microsecondsSinceEpoch}-$rupees',
     at: at,
-    amount: amount,
+    amountPaise: (rupees * paisePerRupee).round(),
     category: category,
     note: note,
   );
@@ -53,49 +56,49 @@ void main() {
   group('allowanceFor', () {
     test('splits evenly when nothing has been spent', () {
       final result = allowanceFor(
-        monthlyBudget: 31000,
+        monthlyBudgetPaise: 3100000,
         entries: [],
         day: DateTime(2026, 8, 1),
       );
-      expect(result, closeTo(1000, 0.01));
+      expect(result, 100000);
     });
 
     test('reduces the allowance after overspending', () {
       final result = allowanceFor(
-        monthlyBudget: 31000,
-        entries: [DailyEntry(date: DateTime(2026, 8, 1), spent: 3000)],
+        monthlyBudgetPaise: 3100000,
+        entries: [DailyEntry(date: DateTime(2026, 8, 1), spentPaise: 300000)],
         day: DateTime(2026, 8, 2),
       );
       // 28000 left across 30 days
-      expect(result, closeTo(933.33, 0.01));
+      expect(result, 93333);
     });
 
     test('raises the allowance after underspending', () {
       final result = allowanceFor(
-        monthlyBudget: 31000,
-        entries: [DailyEntry(date: DateTime(2026, 8, 1), spent: 0)],
+        monthlyBudgetPaise: 3100000,
+        entries: [DailyEntry(date: DateTime(2026, 8, 1), spentPaise: 0)],
         day: DateTime(2026, 8, 2),
       );
       // 31000 left across 30 days
-      expect(result, closeTo(1033.33, 0.01));
+      expect(result, 103333);
     });
 
     test("ignores today's own spending", () {
       final result = allowanceFor(
-        monthlyBudget: 31000,
-        entries: [DailyEntry(date: DateTime(2026, 8, 1), spent: 500)],
+        monthlyBudgetPaise: 3100000,
+        entries: [DailyEntry(date: DateTime(2026, 8, 1), spentPaise: 50000)],
         day: DateTime(2026, 8, 1),
       );
-      expect(result, closeTo(1000, 0.01));
+      expect(result, 100000);
     });
 
     test('ignores spending from a previous month', () {
       final result = allowanceFor(
-        monthlyBudget: 31000,
-        entries: [DailyEntry(date: DateTime(2026, 7, 15), spent: 9999)],
+        monthlyBudgetPaise: 3100000,
+        entries: [DailyEntry(date: DateTime(2026, 7, 15), spentPaise: 999900)],
         day: DateTime(2026, 8, 1),
       );
-      expect(result, closeTo(1000, 0.01));
+      expect(result, 100000);
     });
   });
 
@@ -113,7 +116,7 @@ void main() {
 
       expect(entries, hasLength(1));
       expect(entries.first.date, DateTime(2026, 8, 1));
-      expect(entries.first.spent, closeTo(400, 0.01));
+      expect(entries.first.spentPaise, 40000);
     });
 
     test('keeps separate days separate and sorts oldest first', () {
@@ -128,7 +131,7 @@ void main() {
         DateTime(2026, 8, 2),
         DateTime(2026, 8, 3),
       ]);
-      expect(entries.map((e) => e.spent), [100, 200, 300]);
+      expect(entries.map((e) => e.spentPaise), [10000, 20000, 30000]);
     });
 
     test('ignores the time of day when grouping', () {
@@ -138,7 +141,7 @@ void main() {
       ]);
 
       expect(entries, hasLength(1));
-      expect(entries.first.spent, closeTo(20, 0.01));
+      expect(entries.first.spentPaise, 2000);
     });
 
     test('feeds allowanceFor the same way the old model did', () {
@@ -148,13 +151,13 @@ void main() {
       ];
 
       final result = allowanceFor(
-        monthlyBudget: 31000,
+        monthlyBudgetPaise: 3100000,
         entries: aggregateByDay(expenses),
         day: DateTime(2026, 8, 2),
       );
 
       // 3000 spent yesterday -> 28000 left across 30 days
-      expect(result, closeTo(933.33, 0.01));
+      expect(result, 93333);
     });
   });
 
@@ -166,7 +169,7 @@ void main() {
         _expense(DateTime(2026, 8, 2, 20), 250),
       ];
 
-      expect(spentOn(expenses, DateTime(2026, 8, 2, 14)), closeTo(750, 0.01));
+      expect(spentOn(expenses, DateTime(2026, 8, 2, 14)), 75000);
     });
 
     test('returns zero for a day with no expenses', () {
@@ -200,7 +203,10 @@ void main() {
         _expense(DateTime(2026, 8, 2, 14), 150),
       ]);
 
-      expect(groups.single.expenses.map((e) => e.amount), [200, 150, 100]);
+      expect(
+        groups.single.expenses.map((e) => e.amountPaise),
+        [20000, 15000, 10000],
+      );
     });
 
     test('totals each day', () {
@@ -210,8 +216,8 @@ void main() {
         _expense(DateTime(2026, 8, 1, 9), 400),
       ]);
 
-      expect(groups[0].total, closeTo(350, 0.01));
-      expect(groups[1].total, closeTo(400, 0.01));
+      expect(groups[0].totalPaise, 35000);
+      expect(groups[1].totalPaise, 40000);
     });
 
     test('spans months and years without regrouping wrongly', () {
@@ -238,10 +244,7 @@ void main() {
       final flattened = groups.expand((g) => g.expenses).toList();
 
       expect(flattened, hasLength(expenses.length));
-      expect(
-        groups.fold<double>(0, (sum, g) => sum + g.total),
-        closeTo(100, 0.01),
-      );
+      expect(groups.fold<int>(0, (sum, g) => sum + g.totalPaise), 10000);
     });
   });
 
@@ -253,8 +256,7 @@ void main() {
         _expense(DateTime(2026, 8, 31, 20), 250),
       ];
 
-      expect(spentInMonth(expenses, DateTime(2026, 8, 15)),
-          closeTo(850, 0.01));
+      expect(spentInMonth(expenses, DateTime(2026, 8, 15)), 85000);
     });
 
     test('ignores other months', () {
@@ -264,7 +266,7 @@ void main() {
         _expense(DateTime(2026, 9, 1, 1), 9999),
       ];
 
-      expect(spentInMonth(expenses, DateTime(2026, 8, 2)), closeTo(300, 0.01));
+      expect(spentInMonth(expenses, DateTime(2026, 8, 2)), 30000);
     });
 
     test('ignores the same month in a different year', () {
@@ -273,7 +275,7 @@ void main() {
         _expense(DateTime(2026, 8, 10), 400),
       ];
 
-      expect(spentInMonth(expenses, DateTime(2026, 8, 10)), closeTo(400, 0.01));
+      expect(spentInMonth(expenses, DateTime(2026, 8, 10)), 40000);
     });
 
     test('returns zero when nothing was spent', () {
@@ -294,7 +296,8 @@ void main() {
 
       expect(restored.id, original.id);
       expect(restored.at, original.at);
-      expect(restored.amount, original.amount);
+      expect(restored.amountPaise, 24950);
+      expect(restored.amountPaise, original.amountPaise);
       expect(restored.category, ExpenseCategory.food);
       expect(restored.note, 'Lunch');
     });
@@ -303,7 +306,7 @@ void main() {
       final json = {
         'id': 'x',
         'at': DateTime(2026, 8, 2).toIso8601String(),
-        'amount': 10,
+        'amountPaise': 1000,
         'category': 'crypto_jetski',
         'note': '',
       };
@@ -315,11 +318,48 @@ void main() {
       final json = {
         'id': 'x',
         'at': DateTime(2026, 8, 2).toIso8601String(),
-        'amount': 10,
+        'amountPaise': 1000,
         'category': 'food',
       };
 
       expect(Expense.fromJson(json).note, '');
+    });
+
+    test('reads a pre-paise rupee amount and converts it', () {
+      final json = {
+        'id': 'x',
+        'at': DateTime(2026, 8, 2).toIso8601String(),
+        'amount': 249.5,
+        'category': 'food',
+        'note': '',
+      };
+
+      expect(Expense.fromJson(json).amountPaise, 24950);
+    });
+
+    test('prefers the paise field when a row carries both', () {
+      final json = {
+        'id': 'x',
+        'at': DateTime(2026, 8, 2).toIso8601String(),
+        'amount': 1,
+        'amountPaise': 24950,
+        'category': 'food',
+        'note': '',
+      };
+
+      expect(Expense.fromJson(json).amountPaise, 24950);
+    });
+
+    test('throws when a row has no amount at all', () {
+      final json = {
+        'id': 'x',
+        'at': DateTime(2026, 8, 2).toIso8601String(),
+        'category': 'food',
+        'note': '',
+      };
+
+      // BudgetStorage.loadExpenses turns this into a reported load failure.
+      expect(() => Expense.fromJson(json), throwsA(isA<FormatException>()));
     });
   });
 }

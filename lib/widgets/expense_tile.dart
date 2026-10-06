@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../category_ui.dart';
 import '../expense.dart';
+import '../money.dart';
 
 /// One transaction row. Falls back to the category name as the title
 /// when there's no note, so a row is never blank.
@@ -19,7 +20,7 @@ class ExpenseTile extends StatelessWidget {
       title: Text(hasNote ? expense.note : expense.category.label),
       subtitle: Text(hasNote ? '${expense.category.label} · $time' : time),
       trailing: Text(
-        '₹${expense.amount.toStringAsFixed(0)}',
+        formatMoney(expense.amountPaise),
         style: Theme.of(context)
             .textTheme
             .titleMedium

@@ -1,18 +1,19 @@
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'budget_logic.dart';
+import 'money.dart';
 
 /// Monthly budget lives here rather than on the dashboard — it's a
 /// set-it-once value, not something you touch daily.
 class SettingsScreen extends StatefulWidget {
-  final double monthlyBudget;
-  final ValueChanged<double> onBudgetChanged;
+  final int monthlyBudgetPaise;
+  final ValueChanged<int> onBudgetChanged;
   final Future<void> Function() onSeedDemoData;
   final Future<void> Function() onClearData;
 
   const SettingsScreen({
     super.key,
-    required this.monthlyBudget,
+    required this.monthlyBudgetPaise,
     required this.onBudgetChanged,
     required this.onSeedDemoData,
     required this.onClearData,
@@ -26,14 +27,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _budgetController;
   late final FocusNode _budgetFocus;
 
-  /// The amount that has actually been saved. Kept apart from [_draft] so a
-  /// half-typed or unreadable entry always has something good to fall back
-  /// to.
-  late double _budget;
+  /// The amount that has actually been saved. Kept apart from [_draftPaise]
+  /// so a half-typed or unreadable entry always has something good to fall
+  /// back to.
+  late int _budgetPaise;
 
   /// What the field parses to right now, for the live "per day" line only.
   /// Null while the text is empty or not a usable amount.
-  double? _draft;
+  int? _draftPaise;
 
   /// Set before the debug tools pop, because they change the budget
   /// themselves — without it the pop-time save would put the now-stale text
@@ -43,11 +44,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _budget = widget.monthlyBudget;
-    _draft = _budget == 0 ? null : _budget;
-    _budgetController = TextEditingController(
-      text: _budget == 0 ? '' : _budget.toStringAsFixed(0),
-    );
+    _budgetPaise = widget.monthlyBudgetPaise;
+    _draftPaise = _budgetPaise == 0 ? null : _budgetPaise;
+    _budgetController = TextEditingController(text: _fieldText());
     _budgetFocus = FocusNode()..addListener(_handleFocusChange);
   }
 
@@ -62,20 +61,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// Typing only moves the preview. Saving used to happen here too, which
   /// meant entering 30000 stored 3, then 30, then 300, and so on up.
   void _onChanged(String value) {
-    setState(() => _draft = _parse(value));
+    setState(() => _draftPaise = parseRupeesToPaise(value));
   }
+
+  /// The saved budget as field text. formatAmount is the inverse of
+  /// parseRupeesToPaise, so what is put back can always be read again.
+  String _fieldText() => _budgetPaise == 0 ? '' : formatAmount(_budgetPaise);
 
   void _handleFocusChange() {
     if (!_budgetFocus.hasFocus) _commit();
-  }
-
-  /// Null for anything that isn't a usable amount: empty, junk, negative.
-  double? _parse(String value) {
-    final text = value.trim();
-    if (text.isEmpty) return null;
-    final parsed = double.tryParse(text);
-    if (parsed == null || parsed < 0) return null;
-    return parsed;
   }
 
   /// Writes the field through to storage. Runs on submit, on blur, and on
@@ -84,22 +78,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // The focus listener can fire while the screen is on its way out.
     if (!mounted) return;
 
-    final parsed = _parse(_budgetController.text);
+    final parsed = parseRupeesToPaise(_budgetController.text);
 
     // Text that doesn't parse is a typo in progress, not an instruction to
     // wipe the budget, so leave storage alone and put the saved value back
     // on screen so the field matches what is actually stored.
     if (parsed == null) {
-      _budgetController.text = _budget == 0 ? '' : _budget.toStringAsFixed(0);
-      setState(() => _draft = _budget == 0 ? null : _budget);
+      _budgetController.text = _fieldText();
+      setState(() => _draftPaise = _budgetPaise == 0 ? null : _budgetPaise);
       return;
     }
 
-    if (parsed == _budget) return;
+    if (parsed == _budgetPaise) return;
 
     setState(() {
-      _budget = parsed;
-      _draft = parsed;
+      _budgetPaise = parsed;
+      _draftPaise = parsed;
     });
     widget.onBudgetChanged(parsed);
   }
@@ -107,8 +101,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final double preview = _draft ?? 0;
-    final perDay = preview / daysInMonth(now);
+    final previewPaise = _draftPaise ?? 0;
+    final perDayPaise = previewPaise ~/ daysInMonth(now);
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -184,9 +178,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 20),
             Text(
-              preview == 0
+              previewPaise == 0
                   ? 'Enter an amount to start tracking.'
-                  : "That's about ₹${perDay.toStringAsFixed(0)} a day across "
+                  : "That's about ${formatMoney(perDayPaise)} a day across "
                         '${daysInMonth(now)} days. Your daily allowance '
                         'adjusts up or down as you under- or overspend.',
               style: theme.textTheme.bodySmall?.copyWith(

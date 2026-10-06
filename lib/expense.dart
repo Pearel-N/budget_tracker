@@ -2,6 +2,8 @@
 // model can be used by the logic layer and unit tested without a widget
 // binding. Anything visual (icons, colours) lives in category_ui.dart.
 
+import 'money.dart';
+
 enum ExpenseCategory {
   food('Food'),
   groceries('Groceries'),
@@ -31,14 +33,17 @@ enum ExpenseCategory {
 class Expense {
   final String id;
   final DateTime at;
-  final double amount;
+
+  /// Whole paise, never rupees — see money.dart for why.
+  final int amountPaise;
+
   final ExpenseCategory category;
   final String note;
 
   const Expense({
     required this.id,
     required this.at,
-    required this.amount,
+    required this.amountPaise,
     required this.category,
     this.note = '',
   });
@@ -49,7 +54,7 @@ class Expense {
   Map<String, dynamic> toJson() => {
     'id': id,
     'at': at.toIso8601String(),
-    'amount': amount,
+    'amountPaise': amountPaise,
     'category': category.name,
     'note': note,
   };
@@ -58,10 +63,30 @@ class Expense {
     return Expense(
       id: json['id'] as String,
       at: DateTime.parse(json['at'] as String),
-      amount: (json['amount'] as num).toDouble(),
+      amountPaise: _amountPaiseFromJson(json),
       category: ExpenseCategory.fromName(json['category'] as String?),
       note: (json['note'] as String?) ?? '',
     );
+  }
+
+  /// Reads either shape of stored amount, which is the whole migration for
+  /// data written before the move to paise: those rows carry a rupee
+  /// `amount` as a JSON number and are converted on the way in, then saved
+  /// back out as `amountPaise` the next time anything is written. Converting
+  /// per row rather than in one upfront pass means a list that is only
+  /// half-rewritten still loads.
+  ///
+  /// Throws when neither field is usable, same as the old direct cast did —
+  /// BudgetStorage turns that into a reported load failure rather than a
+  /// crash.
+  static int _amountPaiseFromJson(Map<String, dynamic> json) {
+    final paise = json['amountPaise'];
+    if (paise is num) return paise.round();
+
+    final rupees = json['amount'];
+    if (rupees is num) return (rupees * paisePerRupee).round();
+
+    throw FormatException('Expense JSON has no usable amount: $json');
   }
 
   /// Good enough for a local-only app: unique per microsecond, no extra

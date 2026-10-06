@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'expense.dart';
+import 'money.dart';
 
 /// Sample data for testing the history view. Seeded so every run produces
 /// the same set, and only ever reachable from the debug-only section of
@@ -22,7 +23,10 @@ List<Expense> generateDemoExpenses({DateTime? now, int daysBack = 50}) {
     for (var i = 0; i < count; i++) {
       final sample = _samples[random.nextInt(_samples.length)];
       final spread = sample.max - sample.min;
-      final amount = (sample.min + random.nextInt(spread + 1)).toDouble();
+      // Whole rupees, deliberately: changing the sample amounts would
+      // change the seeded set the history view is eyeballed against.
+      final amountPaise =
+          (sample.min + random.nextInt(spread + 1)) * paisePerRupee;
 
       // Spread entries across waking hours so ordering within a day
       // looks believable.
@@ -37,7 +41,7 @@ List<Expense> generateDemoExpenses({DateTime? now, int daysBack = 50}) {
       expenses.add(Expense(
         id: 'demo-$offset-$i',
         at: at,
-        amount: amount,
+        amountPaise: amountPaise,
         category: sample.category,
         note: sample.note,
       ));

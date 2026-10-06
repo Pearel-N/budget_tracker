@@ -19,12 +19,12 @@ int daysRemainingIn(DateTime date) {
 class DayGroup {
   final DateTime date;
   final List<Expense> expenses;
-  final double total;
+  final int totalPaise;
 
   const DayGroup({
     required this.date,
     required this.expenses,
-    required this.total,
+    required this.totalPaise,
   });
 }
 
@@ -48,7 +48,7 @@ List<DayGroup> groupByDayDescending(List<Expense> expenses) {
     return DayGroup(
       date: day,
       expenses: forDay,
-      total: forDay.fold(0.0, (sum, e) => sum + e.amount),
+      totalPaise: forDay.fold(0, (sum, e) => sum + e.amountPaise),
     );
   }).toList();
 }
@@ -56,9 +56,9 @@ List<DayGroup> groupByDayDescending(List<Expense> expenses) {
 /// A day's total spend — the only shape [allowanceFor] needs.
 class DailyEntry {
   final DateTime date;
-  final double spent;
+  final int spentPaise;
 
-  const DailyEntry({required this.date, required this.spent});
+  const DailyEntry({required this.date, required this.spentPaise});
 }
 
 /// Daily totals, oldest first. Derived from [groupByDayDescending] rather
@@ -66,28 +66,30 @@ class DailyEntry {
 List<DailyEntry> aggregateByDay(List<Expense> expenses) {
   return groupByDayDescending(expenses)
       .reversed
-      .map((group) => DailyEntry(date: group.date, spent: group.total))
+      .map(
+        (group) => DailyEntry(date: group.date, spentPaise: group.totalPaise),
+      )
       .toList();
 }
 
 /// Total spent on a specific calendar day.
-double spentOn(List<Expense> expenses, DateTime day) {
+int spentOn(List<Expense> expenses, DateTime day) {
   final target = DateTime(day.year, day.month, day.day);
   return expenses
       .where((e) => e.day == target)
-      .fold(0.0, (sum, e) => sum + e.amount);
+      .fold(0, (sum, e) => sum + e.amountPaise);
 }
 
 /// Total spent across the whole calendar month that [month] falls in,
 /// today included. Used for the month-level context line.
-double spentInMonth(List<Expense> expenses, DateTime month) {
+int spentInMonth(List<Expense> expenses, DateTime month) {
   return expenses
       .where((e) => e.day.year == month.year && e.day.month == month.month)
-      .fold(0.0, (sum, e) => sum + e.amount);
+      .fold(0, (sum, e) => sum + e.amountPaise);
 }
 
-double allowanceFor({
-  required double monthlyBudget,
+int allowanceFor({
+  required int monthlyBudgetPaise,
   required List<DailyEntry> entries,
   required DateTime day,
 }) {
@@ -98,10 +100,12 @@ double allowanceFor({
           e.date.year == day.year &&
           e.date.month == day.month &&
           e.date.isBefore(dayStart))
-      .fold(0.0, (sum, e) => sum + e.spent);
+      .fold(0, (sum, e) => sum + e.spentPaise);
 
   final remaining = daysRemainingIn(day);
   if (remaining <= 0) return 0;
 
-  return (monthlyBudget - spentBefore) / remaining;
+  // Truncating division: the leftover paise stay unallocated rather than
+  // being handed out to every remaining day and overshooting the budget.
+  return (monthlyBudgetPaise - spentBefore) ~/ remaining;
 }
