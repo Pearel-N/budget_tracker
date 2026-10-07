@@ -95,7 +95,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
             style: Theme.of(context).textTheme.headlineMedium,
             decoration: const InputDecoration(
               labelText: 'Amount',
-              prefixText: '₹ ',
+              prefixText: '$rupeeSymbol ',
               border: OutlineInputBorder(),
             ),
             onChanged: (_) => setState(() {}),

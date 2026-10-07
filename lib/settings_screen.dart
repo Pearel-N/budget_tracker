@@ -127,7 +127,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 textInputAction: TextInputAction.done,
                 decoration: const InputDecoration(
                   labelText: 'Monthly spending money',
-                  prefixText: '₹ ',
+                  prefixText: '$rupeeSymbol ',
                   border: OutlineInputBorder(),
                 ),
                 onChanged: _onChanged,

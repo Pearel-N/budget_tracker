@@ -53,6 +53,10 @@ void main() {
       expect(formatAmount(-2000), '-20');
     });
 
+    test('stays ungrouped — the budget field has to parse it back', () {
+      expect(formatAmount(10000000), '100000');
+    });
+
     test('round-trips through parseRupeesToPaise', () {
       for (final paise in [0, 1, 99, 100, 1040, 3000000]) {
         expect(parseRupeesToPaise(formatAmount(paise)), paise);
@@ -60,8 +64,27 @@ void main() {
     });
   });
 
-  test('formatMoney adds the currency symbol', () {
-    expect(formatMoney(1040), '₹10.40');
+  group('formatMoney', () {
+    test('adds the currency symbol', () {
+      expect(formatMoney(1040), '₹10.40');
+    });
+
+    test('groups thousands', () {
+      expect(formatMoney(3000000), '₹30,000');
+    });
+
+    test('groups in lakhs and crores, not thousands', () {
+      expect(formatMoney(10000000), '₹1,00,000');
+      expect(formatMoney(1000000000), '₹1,00,00,000');
+    });
+
+    test('groups the rupees and still shows the paise', () {
+      expect(formatMoney(3000040), '₹30,000.40');
+    });
+
+    test('leaves an amount under four digits alone', () {
+      expect(formatMoney(99900), '₹999');
+    });
   });
 
   test('two amounts that each show paise agree with their total', () {
