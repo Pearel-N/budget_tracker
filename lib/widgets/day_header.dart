@@ -19,11 +19,22 @@ class DayHeader extends StatelessWidget {
     return Container(
       color: theme.colorScheme.surfaceContainerHighest,
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      // Both halves are Flexible so that at large accessibility text
+      // sizes they wrap onto a second line instead of colliding and
+      // overflowing. Wrapping rather than ellipsis on purpose: a
+      // truncated amount would be worse than a taller header.
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: style),
-          Text(formatMoney(totalPaise), style: style),
+          Flexible(child: Text(label, style: style)),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Text(
+              formatMoney(totalPaise),
+              style: style,
+              textAlign: TextAlign.end,
+            ),
+          ),
         ],
       ),
     );

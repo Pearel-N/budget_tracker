@@ -72,14 +72,20 @@ class BudgetSummary extends StatelessWidget {
           style: theme.textTheme.titleMedium,
         ),
         const SizedBox(height: 8),
-        Text(
-          formatMoney(_remainingPaise.abs()),
-          textAlign: TextAlign.center,
-          style: theme.textTheme.displayMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-            color: _overBudget
-                ? theme.colorScheme.error
-                : theme.colorScheme.primary,
+        // The hero figure has to stay on one line to read as one number,
+        // so at large accessibility text sizes it shrinks to fit instead
+        // of wrapping mid-amount or running off the edge.
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            formatMoney(_remainingPaise.abs()),
+            maxLines: 1,
+            style: theme.textTheme.displayMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: _overBudget
+                  ? theme.colorScheme.error
+                  : theme.colorScheme.primary,
+            ),
           ),
         ),
         const SizedBox(height: 8),
