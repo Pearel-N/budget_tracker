@@ -61,16 +61,23 @@ class DailyEntry {
   const DailyEntry({required this.date, required this.spentPaise});
 }
 
-/// Daily totals, oldest first. Derived from [groupByDayDescending] rather
-/// than grouping a second time.
-List<DailyEntry> aggregateByDay(List<Expense> expenses) {
-  return groupByDayDescending(expenses)
-      .reversed
+/// Daily totals, oldest first, from sections that are already grouped.
+///
+/// Split out from [aggregateByDay] so a caller that already holds the
+/// sections (the home screen builds them for its list) isn't made to
+/// group and sort every expense a second time to get the same numbers.
+List<DailyEntry> dailyEntriesFrom(List<DayGroup> groups) {
+  return groups.reversed
       .map(
         (group) => DailyEntry(date: group.date, spentPaise: group.totalPaise),
       )
       .toList();
 }
+
+/// Daily totals, oldest first. Derived from [groupByDayDescending] rather
+/// than grouping a second time.
+List<DailyEntry> aggregateByDay(List<Expense> expenses) =>
+    dailyEntriesFrom(groupByDayDescending(expenses));
 
 /// Total spent on a specific calendar day.
 int spentOn(List<Expense> expenses, DateTime day) {

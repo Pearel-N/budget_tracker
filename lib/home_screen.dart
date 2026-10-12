@@ -275,8 +275,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// Day sections newest first, with today always present even when
   /// nothing has been logged yet — otherwise the list opens on yesterday
   /// and it looks like today went missing.
-  List<DayGroup> _sections(DateTime today) {
-    final groups = groupByDayDescending(_expenses);
+  ///
+  /// Takes the grouped days rather than grouping them itself, so build()
+  /// can group once and share the result.
+  List<DayGroup> _sections(List<DayGroup> groups, DateTime today) {
     final todayStart = DateTime(today.year, today.month, today.day);
 
     if (groups.isEmpty || groups.first.date != todayStart) {
@@ -342,7 +344,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final rows = _buildRows(_sections(_today), _today);
+    // Grouping sorts every expense, so it happens once per build and both
+    // the list and the summary read from the same result.
+    final groups = groupByDayDescending(_expenses);
+    final rows = _buildRows(_sections(groups, _today), _today);
 
     return Scaffold(
       appBar: AppBar(
@@ -372,7 +377,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               child: BudgetSummary(
                 allowancePaise: allowanceFor(
                   monthlyBudgetPaise: _monthlyBudgetPaise,
-                  entries: aggregateByDay(_expenses),
+                  entries: dailyEntriesFrom(groups),
                   day: _today,
                 ),
                 spentTodayPaise: spentOn(_expenses, _today),
